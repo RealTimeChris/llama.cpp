@@ -1,0 +1,135 @@
+name: CI Build
+
+"on":
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: [main]
+    types: ["opened", "synchronize"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-releases:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        target:
+          - linux
+          # - android
+          - windows
+          - macos
+        include:
+          - target: linux
+            os: ubuntu-latest
+          - target: windows
+            os: windows-latest
+          - target: macos
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Debug matrix
+        run: |
+          echo "Dumping matrix: ${{ toJson(matrix) }}"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+        with:
+          useLocalCache: true
+          useCloudCache: true
+          cmakeVersion: 3.31.4
+          ninjaVersion: 1.12.1
+
+      - name: Set Up VS build tools
+        if: matrix.target == 'windows'
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Install the latest clang compiler
+        if: matrix.target == 'linux'
+        run: |
+            sudo apt update && sudo apt upgrade
+            wget -q https://apt.llvm.org/llvm.sh
+            chmod u+x llvm.sh
+            sudo ./llvm.sh 20
+
+      - name: Install the latest clang compiler
+        if: matrix.target == 'macos'
+        run: | 
+              brew install llvm
+              echo "LLVM binaries are at /opt/homebrew/opt/llvm/bin"
+              echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+              clang++ --version
+
+      - name: Set up NASM
+        if: matrix.target == 'windows'
+        uses: ilammy/setup-nasm@v1
+      # - name: Install CUDA
+      #   if: matrix.asset_name == 'linux' || matrix.asset_name == 'windows'
+      #   uses: Jimver/cuda-toolkit@v0.2.21
+      #   with:
+      #     cuda: '12.8.0'
+      #     method: 'network'
+      #     sub-packages: '["nvcc", "cudart", "nvrtc", "opencl"]'
+      #     non-cuda-packages: '["libcublas", "libcufft", "libnpp"]'
+      #     log-file-suffix: '${{matrix.os}}.txt'
+
+      - name: Configure CMake.
+        run: |
+              cmake -S . -B ./Build -DCMAKE_BUILD_TYPE=Release -DGGML_TESTS=TRUE
+
+      - name: Build the executable.
+        run: |
+              cmake --build ./Build --config=Release -v
+
+      - name: Install the executable.
+        if: matrix.target == 'windows'
+        run: |
+              cmake --install ./Build
+
+      - name: Install the executable.
+        if: matrix.target != 'windows'
+        run: |
+              sudo cmake --install ./Build
+
+      - name: Run the executable
+        if: matrix.target == 'windows'
+        run: |
+            cd "C:/Program Files (x86)/llama.cpp/bin/" &&
+            git clone https://huggingface.co/hugging-quants/Llama-3.2-1B-Instruct-Q8_0-GGUF &&
+            & "C:/Program Files (x86)/llama.cpp/bin/llama-cli.exe" -m "./Llama-3.2-1B-Instruct-Q8_0-GGUF\llama-3.2-1b-instruct-q8_0.gguf" -p "What is the meaning of life?" -b 1 -c 1024 -n 16 -no-cnv
+
+      - name: Run the executable
+        if: matrix.target == 'macos'
+        run:
+            cd /usr/local/bin &&
+            wget -q https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf &&
+            ls /usr/local/lib/ &&
+            sudo chmod +x /usr/local/lib/libllama.dylib &&
+            sudo chmod +x /usr/local/bin/llama-cli &&
+            sudo chmod +x /usr/local/bin/Llama-3.2-1B-Instruct-Q8_0.gguf &&
+            sudo install_name_tool -add_rpath /usr/local/lib /usr/local/bin/llama-cli &&
+            sudo /usr/local/bin/llama-cli -m ./Llama-3.2-1B-Instruct-Q8_0.gguf -p "What is the meaning of life?" -b 1 -c 1024 -n 16 -no-cnv
+
+      - name: Run the executable
+        if: matrix.target == 'linux'
+        run: |
+            cd /usr/local/bin &&
+            wget -q https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf &&
+            ls /usr/local/lib/ &&
+            sudo chmod +x /usr/local/lib/libllama.so &&
+            sudo chmod +x /usr/local/lib/libggml-cpu.so &&
+            sudo chmod +x /usr/local/bin/llama-cli &&
+            sudo chmod +x /usr/local/bin/Llama-3.2-1B-Instruct-Q8_0.gguf &&
+            sudo patchelf --set-rpath /usr/local/lib /usr/local/bin/llama-cli
+            sudo patchelf --add-needed /usr/local/bin/libggml-cpu.so /usr/local/bin/llama-cli
+            sudo /usr/local/bin/llama-cli -m ./Llama-3.2-1B-Instruct-Q8_0.gguf -p "What is the meaning of life?" -b 1 -c 1024 -n 16 -no-cnv
