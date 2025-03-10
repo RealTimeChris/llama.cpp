@@ -126,6 +126,7 @@ jobs:
             cd /usr/local/bin &&
             wget -q https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf &&
             ls /usr/local/lib/ &&
+            ls /usr/local/bin/ &&
             sudo chmod +x /usr/local/lib/libllama.so &&
             sudo chmod +x /usr/local/lib/libggml-cpu.so &&
             sudo chmod +x /usr/local/bin/llama-cli &&
