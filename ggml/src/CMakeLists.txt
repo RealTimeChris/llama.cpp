@@ -193,13 +193,13 @@ add_library(ggml-base
             ../include/ggml-cpp.h
             ../include/ggml-opt.h
             ../include/gguf.h
-            ggml.c
-            ggml-alloc.c
+            ggml.cpp
+            ggml-alloc.cpp
             ggml-backend.cpp
             ggml-opt.cpp
             ggml-threading.cpp
             ggml-threading.h
-            ggml-quants.c
+            ggml-quants.cpp
             ggml-quants.h
             gguf.cpp)
 
@@ -313,7 +313,7 @@ ggml_add_backend(OpenCL)
 
 foreach (target ggml-base ggml)
     target_include_directories(${target} PUBLIC    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include> $<INSTALL_INTERFACE:include>)
-    target_compile_features   (${target} PRIVATE c_std_11 cxx_std_17) # don't bump
+    target_compile_features   (${target} PRIVATE c_std_11 cxx_std_20) # don't bump
 endforeach()
 
 target_link_libraries(ggml-base PRIVATE Threads::Threads)

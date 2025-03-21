@@ -33,7 +33,7 @@ add_library(llama
             )
 
 target_include_directories(llama PUBLIC . ../include ../common)
-target_compile_features   (llama PUBLIC cxx_std_17) # don't bump
+target_compile_features   (llama PUBLIC cxx_std_20) # don't bump
 
 target_link_libraries(llama PUBLIC ggml)
 

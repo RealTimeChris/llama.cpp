@@ -8,13 +8,13 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
     ggml_add_backend_library(${GGML_CPU_NAME})
 
     list (APPEND GGML_CPU_SOURCES
-        ggml-cpu/ggml-cpu.c
+        ggml-cpu/ggml-cpu.cpp
         ggml-cpu/ggml-cpu.cpp
         ggml-cpu/ggml-cpu-aarch64.cpp
         ggml-cpu/ggml-cpu-aarch64.h
         ggml-cpu/ggml-cpu-hbm.cpp
         ggml-cpu/ggml-cpu-hbm.h
-        ggml-cpu/ggml-cpu-quants.c
+        ggml-cpu/ggml-cpu-quants.cpp
         ggml-cpu/ggml-cpu-quants.h
         ggml-cpu/ggml-cpu-traits.cpp
         ggml-cpu/ggml-cpu-traits.h
@@ -25,7 +25,7 @@ function(ggml_add_cpu_backend_variant_impl tag_name)
         ggml-cpu/ggml-cpu-impl.h
         )
 
-    target_compile_features(${GGML_CPU_NAME} PRIVATE c_std_11 cxx_std_17)
+    target_compile_features(${GGML_CPU_NAME} PRIVATE c_std_11 cxx_std_20)
     target_include_directories(${GGML_CPU_NAME} PRIVATE . ggml-cpu)
 
     if (APPLE AND GGML_ACCELERATE)

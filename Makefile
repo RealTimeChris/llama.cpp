@@ -1119,7 +1119,7 @@ DEP_FILES = $(OBJ_GGML:.o=.d) $(OBJ_LLAMA:.o=.d) $(OBJ_COMMON:.o=.d)
 all: $(BUILD_TARGETS)
 
 # force c++ build for source file that have same name as c file
-# Note: need this exception because `ggml-cpu.c` and `ggml-cpu.cpp` both produce the same obj/dep files
+# Note: need this exception because `ggml-cpu.cpp` and `ggml-cpu.cpp` both produce the same obj/dep files
 $(DIR_GGML)/%_cpp.o: $(DIR_GGML)/%.cpp
 	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
 

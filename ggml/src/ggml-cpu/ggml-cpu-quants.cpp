@@ -720,19 +720,19 @@ static inline __m128i packNibbles( __m256i bytes ) {
 #endif  //__loongarch_asx
 
 void quantize_row_q4_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {
-    quantize_row_q4_0_ref(x, y, k);
+    //quantize_row_q4_0_ref(x, y, k);
 }
 
 void quantize_row_q4_1(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {
-    quantize_row_q4_1_ref(x, y, k);
+    //quantize_row_q4_1_ref(x, y, k);
 }
 
 void quantize_row_q5_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {
-    quantize_row_q5_0_ref(x, y, k);
+    //quantize_row_q5_0_ref(x, y, k);
 }
 
 void quantize_row_q5_1(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {
-    quantize_row_q5_1_ref(x, y, k);
+    //quantize_row_q5_1_ref(x, y, k);
 }
 
 void quantize_row_q8_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
@@ -740,7 +740,7 @@ void quantize_row_q8_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, i
     assert(k % QK8_0 == 0);
     const int nb = k / QK8_0;
 
-    block_q8_0 * GGML_RESTRICT y = vy;
+    block_q8_0 * GGML_RESTRICT y = (block_q8_0 *)vy;
 
 #if defined(__ARM_NEON)
     for (int i = 0; i < nb; i++) {
@@ -1054,7 +1054,7 @@ void quantize_row_q8_1(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, i
     assert(k % QK8_1 == 0);
     const int nb = k / QK8_1;
 
-    block_q8_1 * GGML_RESTRICT y = vy;
+    block_q8_1 * GGML_RESTRICT y ;//= vy;
 
 #if defined(__ARM_NEON)
     for (int i = 0; i < nb; i++) {
@@ -1692,51 +1692,51 @@ static inline void get_scale_min_k4(int j, const uint8_t * GGML_RESTRICT q, uint
 //========================- 2-bit (de)-quantization
 
 void quantize_row_q2_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
-    quantize_row_q2_K_ref(x, vy, k);
+    //quantize_row_q2_K_ref(x, vy, k);
 }
 
 //========================= 3-bit (de)-quantization
 
 void quantize_row_q3_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
-    quantize_row_q3_K_ref(x, vy, k);
+    //quantize_row_q3_K_ref(x, vy, k);
 }
 
 // ====================== 4-bit (de)-quantization
 
 void quantize_row_q4_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
     assert(k % QK_K == 0);
-    block_q4_K * GGML_RESTRICT y = vy;
-    quantize_row_q4_K_ref(x, y, k);
+    //block_q4_K * GGML_RESTRICT y = vy;
+    //quantize_row_q4_K_ref(x, y, k);
 }
 
 // ====================== 5-bit (de)-quantization
 
 void quantize_row_q5_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
     assert(k % QK_K == 0);
-    block_q5_K * GGML_RESTRICT y = vy;
-    quantize_row_q5_K_ref(x, y, k);
+    //block_q5_K * GGML_RESTRICT y = vy;
+    //quantize_row_q5_K_ref(x, y, k);
 }
 
 // ====================== 6-bit (de)-quantization
 
 void quantize_row_q6_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
     assert(k % QK_K == 0);
-    block_q6_K * GGML_RESTRICT y = vy;
-    quantize_row_q6_K_ref(x, y, k);
+    //block_q6_K * GGML_RESTRICT y = vy;
+    //quantize_row_q6_K_ref(x, y, k);
 }
 
 // ====================== Ternary (de)-quantization (BitNet b1.58 and TriLMs)
 
 void quantize_row_tq1_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
     assert(k % QK_K == 0);
-    block_tq1_0 * GGML_RESTRICT y = vy;
-    quantize_row_tq1_0_ref(x, y, k);
+    //block_tq1_0 * GGML_RESTRICT y = vy;
+    //quantize_row_tq1_0_ref(x, y, k);
 }
 
 void quantize_row_tq2_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, int64_t k) {
     assert(k % QK_K == 0);
-    block_tq2_0 * GGML_RESTRICT y = vy;
-    quantize_row_tq2_0_ref(x, y, k);
+    //block_tq2_0 * GGML_RESTRICT y = vy;
+    //quantize_row_tq2_0_ref(x, y, k);
 }
 
 static const int8_t kvalues_iq4nl[16] = {-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113};
@@ -1823,7 +1823,7 @@ void quantize_row_q8_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, in
         yc[i].d = 1.0f / iscale;
     }
 #else
-    quantize_row_q8_K_ref(x, y, k);
+    //quantize_row_q8_K_ref(x, y, k);
 #endif
 }
 
@@ -1924,8 +1924,8 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q4_0 * GGML_RESTRICT x = vx;
-    const block_q8_0 * GGML_RESTRICT y = vy;
+    const block_q4_0 * GGML_RESTRICT x ;//= vx;
+    const block_q8_0 * GGML_RESTRICT y ;//= vy;
 
 #if defined(__ARM_FEATURE_MATMUL_INT8)
     if (nrc == 2) {
@@ -2624,8 +2624,8 @@ void ggml_vec_dot_q4_1_q8_1(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q4_1 * GGML_RESTRICT x = vx;
-    const block_q8_1 * GGML_RESTRICT y = vy;
+    const block_q4_1 * GGML_RESTRICT x;// = vx;
+    const block_q8_1 * GGML_RESTRICT y;// = vy;
 
 #if defined(__ARM_FEATURE_MATMUL_INT8)
     if (nrc == 2) {
@@ -2946,8 +2946,8 @@ void ggml_vec_dot_q5_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q5_0 * GGML_RESTRICT x = vx;
-    const block_q8_0 * GGML_RESTRICT y = vy;
+    const block_q5_0 * GGML_RESTRICT x;// = vx;
+    const block_q8_0 * GGML_RESTRICT y;// = vy;
 
 #if defined(__ARM_NEON)
     float32x4_t sumv0 = vdupq_n_f32(0.0f);
@@ -3301,8 +3301,8 @@ void ggml_vec_dot_q5_1_q8_1(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q5_1 * GGML_RESTRICT x = vx;
-    const block_q8_1 * GGML_RESTRICT y = vy;
+    const block_q5_1 * GGML_RESTRICT x;// = vx;
+    const block_q8_1 * GGML_RESTRICT y;// = vy;
 
 #if defined(__ARM_NEON)
     float32x4_t sumv0 = vdupq_n_f32(0.0f);
@@ -3675,8 +3675,8 @@ void ggml_vec_dot_q8_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q8_0 * GGML_RESTRICT x = vx;
-    const block_q8_0 * GGML_RESTRICT y = vy;
+    const block_q8_0 * GGML_RESTRICT x = (const block_q8_0 * )vx;
+    const block_q8_0 * GGML_RESTRICT y = (const block_q8_0 * )vy;
 
 #if defined(__ARM_FEATURE_MATMUL_INT8)
     if (nrc == 2) {
@@ -4087,8 +4087,8 @@ void ggml_vec_dot_tq1_0_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
     UNUSED(by);
     UNUSED(bs);
 
-    const block_tq1_0 * GGML_RESTRICT x = vx;
-    const block_q8_K  * GGML_RESTRICT y = vy;
+    const block_tq1_0 * GGML_RESTRICT x ;//= vx;
+    const block_q8_K  * GGML_RESTRICT y ;//= vy;
 
     const int nb = n / QK_K;
 
@@ -4410,8 +4410,8 @@ void ggml_vec_dot_tq2_0_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
     UNUSED(by);
     UNUSED(bs);
 
-    const block_tq2_0 * GGML_RESTRICT x = vx;
-    const block_q8_K  * GGML_RESTRICT y = vy;
+    const block_tq2_0 * GGML_RESTRICT x;// = vx;
+    const block_q8_K  * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -4582,8 +4582,8 @@ void ggml_vec_dot_q2_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q2_K * GGML_RESTRICT x = vx;
-    const block_q8_K * GGML_RESTRICT y = vy;
+    const block_q2_K * GGML_RESTRICT x;// = vx;
+    const block_q8_K * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -5503,8 +5503,8 @@ void ggml_vec_dot_q3_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
     const uint32_t kmask1 = 0x03030303;
     const uint32_t kmask2 = 0x0f0f0f0f;
 
-    const block_q3_K * GGML_RESTRICT x = vx;
-    const block_q8_K * GGML_RESTRICT y = vy;
+    const block_q3_K * GGML_RESTRICT x;// = vx;
+    const block_q8_K * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -6516,8 +6516,8 @@ void ggml_vec_dot_q4_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q4_K * GGML_RESTRICT x = vx;
-    const block_q8_K * GGML_RESTRICT y = vy;
+    const block_q4_K * GGML_RESTRICT x;// = vx;
+    const block_q8_K * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -7331,8 +7331,8 @@ void ggml_vec_dot_q5_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q5_K * GGML_RESTRICT x = vx;
-    const block_q8_K * GGML_RESTRICT y = vy;
+    const block_q5_K * GGML_RESTRICT x;// = vx;
+    const block_q8_K * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -8153,8 +8153,8 @@ void ggml_vec_dot_q6_K_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q6_K * GGML_RESTRICT x = vx;
-    const block_q8_K * GGML_RESTRICT y = vy;
+    const block_q6_K * GGML_RESTRICT x;// = vx;
+    const block_q8_K * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -9160,8 +9160,8 @@ void ggml_vec_dot_iq2_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const 
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq2_xxs * GGML_RESTRICT x = vx;
-    const block_q8_K    * GGML_RESTRICT y = vy;
+    const block_iq2_xxs * GGML_RESTRICT x;// = vx;
+    const block_q8_K    * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -9521,8 +9521,8 @@ void ggml_vec_dot_iq2_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const v
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq2_xs * GGML_RESTRICT x = vx;
-    const block_q8_K   * GGML_RESTRICT y = vy;
+    const block_iq2_xs * GGML_RESTRICT x;// = vx;
+    const block_q8_K   * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -10106,8 +10106,8 @@ void ggml_vec_dot_iq2_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq2_s * GGML_RESTRICT x = vx;
-    const block_q8_K  * GGML_RESTRICT y = vy;
+    const block_iq2_s * GGML_RESTRICT x;// = vx;
+    const block_q8_K  * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -10584,8 +10584,8 @@ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const 
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq3_xxs * GGML_RESTRICT x = vx;
-    const block_q8_K    * GGML_RESTRICT y = vy;
+    const block_iq3_xxs * GGML_RESTRICT x;// = vx;
+    const block_q8_K    * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -10907,8 +10907,8 @@ void ggml_vec_dot_iq3_s_q8_K (int n, float * GGML_RESTRICT s, size_t bs, const v
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq3_s * GGML_RESTRICT x = vx;
-    const block_q8_K  * GGML_RESTRICT y = vy;
+    const block_iq3_s * GGML_RESTRICT x;// = vx;
+    const block_q8_K  * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -11448,8 +11448,8 @@ void ggml_vec_dot_iq1_s_q8_K  (int n, float * GGML_RESTRICT s, size_t bs, const 
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq1_s * GGML_RESTRICT x = vx;
-    const block_q8_K  * GGML_RESTRICT y = vy;
+    const block_iq1_s * GGML_RESTRICT x;// = vx;
+    const block_q8_K  * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -11788,8 +11788,8 @@ void ggml_vec_dot_iq1_m_q8_K  (int n, float * GGML_RESTRICT s, size_t bs, const 
     UNUSED(by);
     UNUSED(bs);
 
-    const block_iq1_m * GGML_RESTRICT x = vx;
-    const block_q8_K  * GGML_RESTRICT y = vy;
+    const block_iq1_m * GGML_RESTRICT x;// = vx;
+    const block_q8_K  * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -12107,8 +12107,8 @@ void ggml_vec_dot_iq4_nl_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const v
     assert(n % QK4_NL == 0);
     static_assert(QK4_NL == QK8_0, "QK4_NL and QK8_0 must be the same");
 
-    const block_iq4_nl * GGML_RESTRICT x = vx;
-    const block_q8_0   * GGML_RESTRICT y = vy;
+    const block_iq4_nl * GGML_RESTRICT x;// = vx;
+    const block_q8_0   * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK4_NL;
 
@@ -12320,8 +12320,8 @@ void ggml_vec_dot_iq4_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const v
     UNUSED(bs);
     assert(n % QK_K == 0);
 
-    const block_iq4_xs * GGML_RESTRICT x = vx;
-    const block_q8_K   * GGML_RESTRICT y = vy;
+    const block_iq4_xs * GGML_RESTRICT x;//= vx;
+    const block_q8_K   * GGML_RESTRICT y;// = vy;
 
     const int nb = n / QK_K;
 
@@ -12667,7 +12667,7 @@ void ggml_vec_dot_iq4_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const v
 
 void quantize_row_iq4_nl(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {
     assert(k % QK4_NL == 0);
-    quantize_row_iq4_nl_ref(x, y, k);
+    //quantize_row_iq4_nl_ref(x, y, k);
 }
 
 void quantize_row_iq4_xs(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int64_t k) {

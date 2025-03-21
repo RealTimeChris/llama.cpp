@@ -26,7 +26,6 @@ else()
         add_subdirectory(gbnf-validator)
     endif()
 
-    add_subdirectory(gguf-hash)
     add_subdirectory(gguf-split)
     add_subdirectory(gguf)
     add_subdirectory(gritlm)
