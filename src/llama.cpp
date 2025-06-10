@@ -33,7 +33,8 @@ struct json_tensor {
     std::vector<std::unique_ptr<json_tensor>> inputs{};
     std::array<size_t, 4>                     dims{};
     std::string                               tensor_name{};
-    std::string                               tensor_op{};
+    std::string                               op_name{};
+    std::string                               type_name{};
 
     json_tensor() noexcept = default;
 
@@ -42,7 +43,8 @@ struct json_tensor {
             dims[x] = tensor->ne[x];
         }
         tensor_name = tensor->name;
-        tensor_op   = ggml_op_name(tensor->op);
+        op_name     = ggml_op_name(tensor->op);
+        type_name   = ggml_type_name(tensor->type);
         if (!input) {
             for (ggml_tensor ** tensor_new = tensor->src; *tensor_new; ++tensor_new) {
                 inputs.emplace_back(std::make_unique<json_tensor>(*tensor_new, true));
@@ -69,8 +71,8 @@ template <> struct jsonifier::core<test_struct> {
 namespace jsonifier {
 template <> struct core<json_tensor> {
     using value_type = json_tensor;
-    static constexpr auto parseValue =
-        createValue<&json_tensor::inputs, &json_tensor::dims, &json_tensor::tensor_name, &json_tensor::tensor_op>();
+    static constexpr auto parseValue = createValue<&json_tensor::inputs, &json_tensor::dims, &json_tensor::tensor_name,
+                                                   &json_tensor::op_name, &json_tensor::type_name>();
 };
 };  // namespace jsonifier
 
