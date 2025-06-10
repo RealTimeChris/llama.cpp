@@ -6,6 +6,7 @@
 #include <mutex>
 #include <sstream>
 #include <thread>
+#include <chrono>
 #include <vector>
 
 int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;

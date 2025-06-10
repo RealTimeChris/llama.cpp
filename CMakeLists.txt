@@ -5,6 +5,16 @@ include(CheckIncludeFileCXX)
 #set(CMAKE_WARN_DEPRECATED YES)
 set(CMAKE_WARN_UNUSED_CLI YES)
 
+include(FetchContent)
+FetchContent_Declare(
+        Jsonifier
+        GIT_REPOSITORY https://github.com/realtimechris/jsonifier.git
+        GIT_TAG        dev
+)
+
+# Also provides "common"
+FetchContent_MakeAvailable(Jsonifier)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
@@ -28,6 +38,8 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 else()
     set(LLAMA_STANDALONE OFF)
 endif()
+
+option(LLAMA_USE_SYSTEM_GGML "Use system libggml" OFF)
 
 if (EMSCRIPTEN)
     set(BUILD_SHARED_LIBS_DEFAULT OFF)
@@ -75,11 +87,13 @@ option(LLAMA_BUILD_COMMON "llama: build common utils library" ${LLAMA_STANDALONE
 
 # extra artifacts
 option(LLAMA_BUILD_TESTS    "llama: build tests"          ${LLAMA_STANDALONE})
+option(LLAMA_BUILD_TOOLS    "llama: build tools"          ${LLAMA_STANDALONE})
 option(LLAMA_BUILD_EXAMPLES "llama: build examples"       ${LLAMA_STANDALONE})
 option(LLAMA_BUILD_SERVER   "llama: build server example" ${LLAMA_STANDALONE})
 
 # 3rd party libs
-option(LLAMA_CURL "llama: use libcurl to download model from an URL" OFF)
+option(LLAMA_CURL       "llama: use libcurl to download model from an URL" ON)
+option(LLAMA_LLGUIDANCE "llama-common: include LLGuidance library for structured output in common utils" OFF)
 
 # Required for relocatable CMake package
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/build-info.cmake)
@@ -144,7 +158,13 @@ endif()
 # 3rd-party
 #
 
-if (NOT TARGET ggml)
+if (LLAMA_USE_SYSTEM_GGML)
+    message(STATUS "Using system-provided libggml, skipping ggml build")
+    find_package(ggml REQUIRED)
+    add_library(ggml ALIAS ggml::ggml)
+endif()
+
+if (NOT TARGET ggml AND NOT LLAMA_USE_SYSTEM_GGML)
     add_subdirectory(ggml)
     # ... otherwise assume ggml is added by a parent CMakeLists.txt
 endif()
@@ -158,6 +178,11 @@ add_subdirectory(src)
 #
 # utils, programs, examples and tests
 #
+
+if (NOT LLAMA_BUILD_COMMON)
+    message(STATUS "LLAMA_BUILD_COMMON is OFF, disabling LLAMA_CURL")
+    set(LLAMA_CURL OFF)
+endif()
 
 if (LLAMA_BUILD_COMMON)
     add_subdirectory(common)
@@ -191,6 +216,8 @@ set(LLAMA_BIN_INSTALL_DIR     ${CMAKE_INSTALL_BINDIR}     CACHE PATH "Location o
 set(LLAMA_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/llama.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/llama-cpp.h)
+
+target_link_libraries(llama PUBLIC Jsonifier::Jsonifier)
 
 set_target_properties(llama
     PROPERTIES
@@ -232,4 +259,4 @@ configure_file(cmake/llama.pc.in
         @ONLY)
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/llama.pc"
-        DESTINATION lib/pkgconfig)
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
