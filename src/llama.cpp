@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <ctime>
+#include <unordered_set>
 #include <functional>
 #include <jsonifier/Index.hpp>
 #include "../ggml/src/ggml-impl.h"
@@ -29,20 +31,126 @@
 #    pragma warning(disable : 4244 4267)  // possible loss of data
 #endif
 
+// from
+// https://stackoverflow.com/questions/16337610/how-to-know-if-a-type-is-a-specialization-of-stdvector
+template <typename, template <typename...> typename> constexpr bool is_specialization_v = false;
+
+template <template <typename...> typename value_type, typename... arg_types>
+constexpr bool is_specialization_v<value_type<arg_types...>, value_type> = true;
+
+template <typename value_type> concept time_type = is_specialization_v<value_type, std::chrono::duration>;
+
+template <time_type value_type = std::chrono::nanoseconds> class stop_watch {
+  public:
+    using hr_clock = std::conditional_t<std::chrono::high_resolution_clock::is_steady,
+                                        std::chrono::high_resolution_clock, std::chrono::steady_clock>;
+    static constexpr bool lock_free{ std::atomic<value_type>::is_always_lock_free };
+    using time_type = std::conditional_t<lock_free, value_type, uint64_t>;
+
+    stop_watch(uint64_t newTime) noexcept {
+        total_time_units.store(time_type{ newTime }, std::memory_order_release);
+    }
+
+    stop_watch & operator=(stop_watch && other) noexcept {
+        if (this != &other) {
+            total_time_units.store(other.total_time_units.load(std::memory_order_acquire), std::memory_order_release);
+            start_time_units.store(other.start_time_units.load(std::memory_order_acquire), std::memory_order_release);
+        }
+        return *this;
+    }
+
+    stop_watch(stop_watch && other) noexcept { *this = std::move(other); }
+
+    stop_watch & operator=(const stop_watch & other) noexcept {
+        if (this != &other) {
+            total_time_units.store(other.total_time_units.load(std::memory_order_acquire), std::memory_order_release);
+            start_time_units.store(other.start_time_units.load(std::memory_order_acquire), std::memory_order_release);
+        }
+        return *this;
+    }
+
+    stop_watch(const stop_watch & other) noexcept { *this = other; }
+
+    bool has_time_elapsed() noexcept {
+        return ((get_current_time() - start_time_units.load(std::memory_order_acquire)) >=
+                total_time_units.load(std::memory_order_acquire));
+    }
+
+    void add_time() noexcept {
+        std::unique_lock lock{ mutex };
+        values.emplace_back(total_time_elapsed());
+        lock.release();
+        reset();
+    }
+
+    uint64_t get_average(time_type newTimeValue = time_type{}) noexcept {
+        std::unique_lock lock{ mutex };
+        uint64_t         total_time{};
+        for (auto & value : values) {
+            total_time += get_value_as_uint(value);
+        }
+        return total_time / ((values.size() > 0) ? values.size() : 1);
+    }
+
+    void reset(time_type newTimeValue = time_type{}) noexcept {
+        if (newTimeValue != time_type{}) {
+            total_time_units.store(newTimeValue, std::memory_order_release);
+        }
+        start_time_units.store(get_current_time(), std::memory_order_release);
+    }
+
+    uint64_t get_total_wait_time() const noexcept {
+        return get_value_as_uint(total_time_units.load(std::memory_order_acquire));
+    }
+
+    time_type total_time_elapsed() noexcept {
+        return get_current_time() - start_time_units.load(std::memory_order_acquire);
+    }
+
+    uint64_t total_time_elapsed_uint64() noexcept {
+        return get_value_as_uint(get_current_time()) -
+               get_value_as_uint(start_time_units.load(std::memory_order_acquire));
+    }
+
+  protected:
+    std::atomic<time_type> total_time_units{};
+    std::atomic<time_type> start_time_units{};
+    std::vector<time_type> values{};
+    std::mutex             mutex{};
+
+    time_type get_current_time() {
+        if constexpr (lock_free) {
+            return std::chrono::duration_cast<value_type>(hr_clock::now().time_since_epoch());
+        } else {
+            return std::chrono::duration_cast<value_type>(hr_clock::now().time_since_epoch()).count();
+        }
+    }
+
+    uint64_t get_value_as_uint(time_type time) {
+        if constexpr (lock_free) {
+            return time.count();
+        } else {
+            return time;
+        }
+    }
+};
+
 struct json_tensor {
     std::vector<std::unique_ptr<json_tensor>> inputs{};
-    std::array<size_t, 4>                     dims{};
-    std::string                               tensor_name{};
-    std::string                               tensor_op{};
+    std::array<size_t, 4>                     dimensions{};
+    std::string                               name{};
+    std::string                               operation{};
+    std::string                               type{};
 
     json_tensor() noexcept = default;
 
     json_tensor(ggml_tensor * tensor, bool input = false) {
         for (size_t x = 0; x < 4; ++x) {
-            dims[x] = tensor->ne[x];
+            dimensions[x] = tensor->ne[x];
         }
-        tensor_name = tensor->name;
-        tensor_op   = ggml_op_name(tensor->op);
+        name = tensor->name;
+        operation = ggml_op_name(tensor->op);
+        type      = ggml_type_name(tensor->type);
         if (!input) {
             for (ggml_tensor ** tensor_new = tensor->src; *tensor_new; ++tensor_new) {
                 inputs.emplace_back(std::make_unique<json_tensor>(*tensor_new, true));
@@ -51,26 +159,105 @@ struct json_tensor {
     }
 };
 
-struct test_struct {
-    std::vector<std::string> testString{};
-    std::vector<uint64_t>    testUint{};
-    std::vector<double>      testDouble{};
-    std::vector<int64_t>     testInt{};
-    std::vector<bool>        testBool{};
+struct json_tensor_wrong_order {
+    std::string                               type{};
+    std::string                               operation{};
+    std::vector<std::unique_ptr<json_tensor_wrong_order>> inputs{};
+    std::array<size_t, 4>                     dimensions{};
+    std::string                               name{};
+
+    json_tensor_wrong_order() noexcept = default;
 };
 
-template <> struct jsonifier::core<test_struct> {
-    using value_type = test_struct;
-    static constexpr auto parseValue =
-        createValue<&value_type::testUint, &value_type::testBool, &value_type::testString, &value_type::testInt,
-                    &value_type::testDouble>();
-};
+// Helper function for indentation
+std::string indent(int level) {
+    return std::string(level * 2, ' ');
+}
+
+// ⚡ RECURSIVE PRETTY PRINTER WITH INDENTATION
+std::ostream & print_tensor(std::ostream & os, const json_tensor_wrong_order & tensor, int level = 0) {
+    std::string ind = indent(level);
+
+    //os << ind << "📊 Tensor {\n";
+
+    // Name
+    //os << ind << "  🏷️  name: \"" << tensor.name << "\"\n";
+    //values.emplace(tensor.name);
+
+    // Type
+    //os << ind << "  🔧 type: \"" << tensor.type << "\"\n";
+
+    // Operation
+    //os << ind << "  ⚙️  operation: \"" << tensor.operation << "\"\n";
+
+    // Dimensions with pretty formatting
+    //os << ind << "  📐 dimensions: [";
+    for (size_t i = 0; i < tensor.dimensions.size(); ++i) {
+        if (i > 0) {
+            //os << " × ";
+        }
+        //os << tensor.dimensions[i];
+    }
+    //os << "]\n";
+
+    // Memory calculation
+    size_t total_elements = 1;
+    for (size_t dim : tensor.dimensions) {
+        total_elements *= dim;
+    }
+    //os << ind << "  💾 elements: " << std::setw(12) << total_elements << " ";
+
+    // Memory size estimation
+    if (total_elements > 0) {
+        double mb = total_elements * 4.0 / (1024.0 * 1024.0);  // Assume 4 bytes per element
+        //os << "(" << std::fixed << std::setprecision(2) << mb << " MB)";
+    }
+    //os << "\n";
+
+    // Inputs (recursive)
+    if (!tensor.inputs.empty()) {
+        //os << ind << "  🔗 inputs: [\n";
+        for (size_t i = 0; i < tensor.inputs.size(); ++i) {
+            if (tensor.inputs[i]) {
+                //os << ind << "    [" << i << "] ";
+                //print_tensor(os, *tensor.inputs[i], level + 3);
+                if (i < tensor.inputs.size() - 1) {
+                    //os << ind << "    ────────────────────────\n";
+                }
+            } else {
+                //os << ind << "    [" << i << "] nullptr\n";
+            }
+        }
+        //os << ind << "  ]\n";
+    } else {
+        //os << ind << "  🔗 inputs: []\n";
+    }
+
+    //os << ind << "}";
+    if (level == 0) {
+        //os << "\n";  // Add newline only for top-level
+    }
+
+    return os;
+}
+
+// 🎯 MAIN PRETTY PRINT OPERATOR
+std::ostream & operator<<(std::ostream & os, const json_tensor_wrong_order & tensor) {
+    return print_tensor(os, tensor);
+}
 
 namespace jsonifier {
 template <> struct core<json_tensor> {
     using value_type = json_tensor;
-    static constexpr auto parseValue =
-        createValue<&json_tensor::inputs, &json_tensor::dims, &json_tensor::tensor_name, &json_tensor::tensor_op>();
+    static constexpr auto parseValue = createValue<&json_tensor::inputs, &json_tensor::dimensions, &json_tensor::name,
+                                                   &json_tensor::operation, &json_tensor::type>();
+};
+
+template <> struct core<json_tensor_wrong_order> {
+    using value_type                 = json_tensor_wrong_order;
+    static constexpr auto parseValue = createValue<&json_tensor_wrong_order::dimensions, &json_tensor_wrong_order::type,
+                    &json_tensor_wrong_order::inputs, &json_tensor_wrong_order::name,
+                                                   &json_tensor_wrong_order::operation>();
 };
 };  // namespace jsonifier
 
@@ -7686,6 +7873,8 @@ bool save_string_to_file(const std::string & content, const std::string & filena
     return file.good();
 }
 
+stop_watch stop_watch_val{ 0 };
+
 // decode a batch of tokens by evaluating the transformer
 // in case of unsuccessful decoding (error or warning),
 // the kv_cache state will be returned to its original state
@@ -7847,7 +8036,7 @@ static int llama_decode_impl(llama_context & lctx, llama_batch inp_batch) {
         
         ggml_cgraph * gf = llama_build_graph(lctx, ubatch, false);
         std::vector<json_tensor> json_tensors{};
-        std::vector<json_tensor> json_tensors_new{};
+        std::vector<json_tensor_wrong_order> json_tensors_new{};
         for (size_t x = 0; x < gf->n_leafs; ++x) {
             json_tensors.emplace_back(gf->leafs[x]);
         }
@@ -7861,6 +8050,9 @@ static int llama_decode_impl(llama_context & lctx, llama_batch inp_batch) {
         parser.parseJson(json_tensors_new, json_string);
         std::cout << "CURRENT COUNT: " << json_tensors.size() << std::endl;
         std::cout << "CURRENT COUNT: " << json_tensors_new.size() << std::endl;
+        for (auto & value : json_tensors_new) {
+            std::cout << value << std::endl;
+        }
         save_string_to_file(json_string, "../../../../../TensorData.txt");
 
         // the output is always the last tensor in the graph
@@ -7892,7 +8084,10 @@ static int llama_decode_impl(llama_context & lctx, llama_batch inp_batch) {
 
         llama_set_inputs(lctx, ubatch);
 
+
+        stop_watch_val.reset();
         const auto compute_status = llama_graph_compute(lctx, gf, n_threads, threadpool);
+        std::cout << "TOTAL TIME ELAPSED: " << stop_watch_val.total_time_elapsed() << std::endl;
         if (compute_status != GGML_STATUS_SUCCESS) {
             kv_slot_restorer.restore(kv_self);
             switch (compute_status) {
