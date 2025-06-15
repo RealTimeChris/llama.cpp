@@ -5,6 +5,16 @@ include(CheckIncludeFileCXX)
 #set(CMAKE_WARN_DEPRECATED YES)
 set(CMAKE_WARN_UNUSED_CLI YES)
 
+include(FetchContent)
+FetchContent_Declare(
+        Jsonifier
+        GIT_REPOSITORY https://github.com/realtimechris/jsonifier.git
+        GIT_TAG        dev
+)
+
+# Also provides "common"
+FetchContent_MakeAvailable(Jsonifier)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
@@ -210,6 +220,8 @@ set(LLAMA_BIN_INSTALL_DIR     ${CMAKE_INSTALL_BINDIR}     CACHE PATH "Location o
 set(LLAMA_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/llama.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/llama-cpp.h)
+
+target_link_libraries(llama PUBLIC Jsonifier::Jsonifier)
 
 set_target_properties(llama
     PROPERTIES

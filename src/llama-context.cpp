@@ -1,7 +1,9 @@
 #include "llama-context.h"
-
+#include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
 
 #include "../ggml/include/ggml-backend.h"
@@ -895,7 +897,7 @@ std::string format_dimensions(const int64_t * ne, int max_dims = GGML_MAX_DIMS) 
 }
 
 // Main pretty print function
-void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os) {
+void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os, bool input = false) {
     if (!tensor) {
         os << "NULL tensor\n";
         return;
@@ -908,19 +910,36 @@ void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os) {
     } else {
         tensor_name = "<unnamed>";
     }
-
+    std::string tab{};
+    if (input) {
+        tab = "    ";
+    }
     // Format output with nice alignment
     const int label_width = 12;
-
-    os << "────────────────────────────────────────\n";
-    os << "" << std::left << std::setw(37) << ("Tensor: " + tensor_name) << " │\n";
-    os << "────────────────────────────────────────\n";
-    os << "" << std::left << std::setw(label_width) << "Type:" << std::left << std::setw(24)
+    if (!input) {
+        os << "────────────────────────────────────────\n";
+        os << tab << std::left << std::setw(37) << ("Tensor: " + tensor_name) << " │\n";
+        os << "────────────────────────────────────────\n";
+    } else {
+        os << tab << std::left << std::setw(37) << ("Tensor: " + tensor_name) << " │\n";
+    }
+    os << tab << std::left << std::setw(label_width) << "Type:" << std::left << std::setw(24)
        << ggml_type_name(tensor->type) << " \n";
-    os << "" << std::left << std::setw(label_width) << "Dimensions:" << std::left << std::setw(24)
+    os << tab << std::left << std::setw(label_width) << "Dimensions:" << std::left << std::setw(24)
        << format_dimensions(tensor->ne) << " \n";
-    os << "" << std::left << std::setw(label_width) << "Operation:" << std::left << std::setw(24)
-       << ggml_op_name(tensor->op) << " \n";
+    if (!input) {
+        os << "" << std::left << std::setw(label_width) << "Operation:" << std::left << std::setw(24)
+           << ggml_op_name(tensor->op) << " \n";
+        os << "" << std::left << std::setw(label_width) << "Inputs:";
+        size_t input{};
+        for (ggml_tensor * const * tensor_new = tensor->src; *tensor_new; ++tensor_new) {
+            ++input;
+        }
+        os << "" << std::left << std::setw(label_width) << std::to_string(input) << " \n";
+        for (ggml_tensor * const * tensor_new = tensor->src; *tensor_new; ++tensor_new) {
+            pretty_print_tensor(*tensor_new, os, true);
+        }
+    }
 
     // Calculate total elements
     int64_t total_elements = 1;
@@ -929,10 +948,12 @@ void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os) {
             total_elements *= tensor->ne[i];
         }
     }
-    os << "" << std::left << std::setw(label_width) << "Elements:" << std::left << std::setw(24) << total_elements
-       << "\n";
+    if (!input) {
+        os << "" << std::left << std::setw(label_width) << "Elements:" << std::left << std::setw(24) << total_elements
+           << "\n";
 
-    os << "─────────────────────────────────────────\n";
+        os << "─────────────────────────────────────────\n";
+    }
 }
 
 bool save_string_to_file(const std::string & content, const std::string & filename) {
@@ -1074,17 +1095,21 @@ int llama_context::decode(llama_batch & inp_batch) {
         // LLAMA_LOG_INFO("graph build time: %.3f ms (%d nodes, %d leafs)\n", (ggml_time_us() - t_start_us)/1000.0, gf->n_nodes, gf->n_leafs);
 
         ggml_backend_sched_alloc_graph(sched.get(), gf);
-        std::stringstream stream{};
-        for (size_t x = 0; x < gf->n_leafs; ++x) {
-            pretty_print_tensor(gf->leafs[x], stream);
-        }
-        for (size_t x = 0; x < gf->n_nodes; ++x) {
-            pretty_print_tensor(gf->nodes[x], stream);
-        }
-        save_string_to_file(stream.str(), "../../../../../TensorData.txt");
+        //std::stringstream stream{};
+        //for (size_t x = 0; x < gf->n_leafs; ++x) {
+        //pretty_print_tensor(gf->leafs[x], stream);
+        //}
+        //for (size_t x = 0; x < gf->n_nodes; ++x) {
+        //pretty_print_tensor(gf->nodes[x], stream);
+        //}
+        //save_string_to_file(stream.str(), "../../../../../TensorData.txt");
         res->set_inputs(&ubatch);
-
+        stop_watch_val.reset();
         const auto compute_status = graph_compute(gf, ubatch.n_tokens > 1);
+        stop_watch_val.add_time();
+        std::cout << "LLAMA.CPP/GGML AVERAGE COMPUTE TIME, OVER: "
+                  << std::setw(50 - std::size("LLAMA.CPP/GGML AVERAGE COMPUTE TIME, OVER: "))
+                  << stop_watch_val.get_count() << " TOKENS: " << stop_watch_val.get_average() << std::endl;
         if (compute_status != GGML_STATUS_SUCCESS) {
             switch (compute_status) {
                 case GGML_STATUS_ABORTED:
