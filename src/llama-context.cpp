@@ -1,7 +1,9 @@
 #include "llama-context.h"
-
+#include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
 
 #include "../ggml/include/ggml-backend.h"
@@ -11,6 +13,113 @@
 #include "llama-kv-cache.h"
 #include "llama-mmap.h"
 #include "llama-model.h"
+
+namespace test {
+
+// from
+// https://stackoverflow.com/questions/16337610/how-to-know-if-a-type-is-a-specialization-of-stdvector
+template <typename, template <typename...> typename> constexpr bool is_specialization_v = false;
+
+template <template <typename...> typename value_type, typename... arg_types>
+constexpr bool is_specialization_v<value_type<arg_types...>, value_type> = true;
+
+template <typename value_type> concept time_type = is_specialization_v<value_type, std::chrono::duration>;
+
+template <time_type value_type = std::chrono::nanoseconds> class stop_watch {
+  public:
+    using hr_clock = std::conditional_t<std::chrono::high_resolution_clock::is_steady,
+                                        std::chrono::high_resolution_clock, std::chrono::steady_clock>;
+    static constexpr bool lock_free{ std::atomic<value_type>::is_always_lock_free };
+    using time_type = std::conditional_t<lock_free, value_type, uint64_t>;
+
+    stop_watch(uint64_t newTime) noexcept { total_time_units.store(time_type{ newTime }, std::memory_order_release); }
+
+    stop_watch & operator=(stop_watch && other) noexcept {
+        if (this != &other) {
+            total_time_units.store(other.total_time_units.load(std::memory_order_acquire), std::memory_order_release);
+            start_time_units.store(other.start_time_units.load(std::memory_order_acquire), std::memory_order_release);
+        }
+        return *this;
+    }
+
+    stop_watch(stop_watch && other) noexcept { *this = std::move(other); }
+
+    stop_watch & operator=(const stop_watch & other) noexcept {
+        if (this != &other) {
+            total_time_units.store(other.total_time_units.load(std::memory_order_acquire), std::memory_order_release);
+            start_time_units.store(other.start_time_units.load(std::memory_order_acquire), std::memory_order_release);
+        }
+        return *this;
+    }
+
+    stop_watch(const stop_watch & other) noexcept { *this = other; }
+
+    bool has_time_elapsed() noexcept {
+        return ((get_current_time() - start_time_units.load(std::memory_order_acquire)) >=
+                total_time_units.load(std::memory_order_acquire));
+    }
+
+    void add_time() noexcept {
+        //std::unique_lock lock{ mutex };
+        values.emplace_back(total_time_elapsed());
+        //lock.release();
+        reset();
+    }
+
+    uint64_t get_count() noexcept { return values.size(); }
+
+    uint64_t get_average(time_type newTimeValue = time_type{}) noexcept {
+        std::unique_lock lock{ mutex };
+        uint64_t         total_time{};
+        for (auto & value : values) {
+            total_time += get_value_as_uint(value);
+        }
+        return total_time / ((values.size() > 0) ? values.size() : 1);
+    }
+
+    void reset(time_type newTimeValue = time_type{}) noexcept {
+        if (newTimeValue != time_type{}) {
+            total_time_units.store(newTimeValue, std::memory_order_release);
+        }
+        start_time_units.store(get_current_time(), std::memory_order_release);
+    }
+
+    uint64_t get_total_wait_time() const noexcept {
+        return get_value_as_uint(total_time_units.load(std::memory_order_acquire));
+    }
+
+    time_type total_time_elapsed() noexcept {
+        return get_current_time() - start_time_units.load(std::memory_order_acquire);
+    }
+
+    uint64_t total_time_elapsed_uint64() noexcept {
+        return get_value_as_uint(get_current_time()) -
+               get_value_as_uint(start_time_units.load(std::memory_order_acquire));
+    }
+
+  protected:
+    std::atomic<time_type> total_time_units{};
+    std::atomic<time_type> start_time_units{};
+    std::vector<time_type> values{};
+    std::mutex             mutex{};
+
+    time_type get_current_time() {
+        if constexpr (lock_free) {
+            return std::chrono::duration_cast<value_type>(hr_clock::now().time_since_epoch());
+        } else {
+            return std::chrono::duration_cast<value_type>(hr_clock::now().time_since_epoch()).count();
+        }
+    }
+
+    uint64_t get_value_as_uint(time_type time) {
+        if constexpr (lock_free) {
+            return time.count();
+        } else {
+            return time;
+        }
+    }
+};
+}  // namespace test
 
 //
 // llama_context
@@ -895,7 +1004,7 @@ std::string format_dimensions(const int64_t * ne, int max_dims = GGML_MAX_DIMS) 
 }
 
 // Main pretty print function
-void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os) {
+void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os, bool input = false) {
     if (!tensor) {
         os << "NULL tensor\n";
         return;
@@ -908,19 +1017,36 @@ void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os) {
     } else {
         tensor_name = "<unnamed>";
     }
-
+    std::string tab{};
+    if (input) {
+        tab = "    ";
+    }
     // Format output with nice alignment
     const int label_width = 12;
-
-    os << "────────────────────────────────────────\n";
-    os << "" << std::left << std::setw(37) << ("Tensor: " + tensor_name) << " │\n";
-    os << "────────────────────────────────────────\n";
-    os << "" << std::left << std::setw(label_width) << "Type:" << std::left << std::setw(24)
+    if (!input) {
+        os << "────────────────────────────────────────\n";
+        os << tab << std::left << std::setw(37) << ("Tensor: " + tensor_name) << " │\n";
+        os << "────────────────────────────────────────\n";
+    } else {
+        os << tab << std::left << std::setw(37) << ("Tensor: " + tensor_name) << " │\n";
+    }
+    os << tab << std::left << std::setw(label_width) << "Type:" << std::left << std::setw(24)
        << ggml_type_name(tensor->type) << " \n";
-    os << "" << std::left << std::setw(label_width) << "Dimensions:" << std::left << std::setw(24)
+    os << tab << std::left << std::setw(label_width) << "Dimensions:" << std::left << std::setw(24)
        << format_dimensions(tensor->ne) << " \n";
-    os << "" << std::left << std::setw(label_width) << "Operation:" << std::left << std::setw(24)
-       << ggml_op_name(tensor->op) << " \n";
+    if (!input) {
+        os << "" << std::left << std::setw(label_width) << "Operation:" << std::left << std::setw(24)
+           << ggml_op_name(tensor->op) << " \n";
+        os << "" << std::left << std::setw(label_width) << "Inputs:";
+        size_t input{};
+        for (ggml_tensor * const * tensor_new = tensor->src; *tensor_new; ++tensor_new) {
+            ++input;
+        }
+        os << "" << std::left << std::setw(label_width) << std::to_string(input) << " \n";
+        for (ggml_tensor * const * tensor_new = tensor->src; *tensor_new; ++tensor_new) {
+            pretty_print_tensor(*tensor_new, os, true);
+        }
+    }
 
     // Calculate total elements
     int64_t total_elements = 1;
@@ -929,11 +1055,15 @@ void pretty_print_tensor(const struct ggml_tensor * tensor, std::ostream & os) {
             total_elements *= tensor->ne[i];
         }
     }
-    os << "" << std::left << std::setw(label_width) << "Elements:" << std::left << std::setw(24) << total_elements
-       << "\n";
+    if (!input) {
+        os << "" << std::left << std::setw(label_width) << "Elements:" << std::left << std::setw(24) << total_elements
+           << "\n";
 
-    os << "─────────────────────────────────────────\n";
+        os << "─────────────────────────────────────────\n";
+    }
 }
+
+test::stop_watch stop_watch_val{ 0 };
 
 bool save_string_to_file(const std::string & content, const std::string & filename) {
     std::ofstream file(filename);
@@ -1074,17 +1204,21 @@ int llama_context::decode(llama_batch & inp_batch) {
         // LLAMA_LOG_INFO("graph build time: %.3f ms (%d nodes, %d leafs)\n", (ggml_time_us() - t_start_us)/1000.0, gf->n_nodes, gf->n_leafs);
 
         ggml_backend_sched_alloc_graph(sched.get(), gf);
-        std::stringstream stream{};
-        for (size_t x = 0; x < gf->n_leafs; ++x) {
-            pretty_print_tensor(gf->leafs[x], stream);
-        }
-        for (size_t x = 0; x < gf->n_nodes; ++x) {
-            pretty_print_tensor(gf->nodes[x], stream);
-        }
-        save_string_to_file(stream.str(), "../../../../../TensorData.txt");
+        //std::stringstream stream{};
+        //for (size_t x = 0; x < gf->n_leafs; ++x) {
+        //pretty_print_tensor(gf->leafs[x], stream);
+        //}
+        //for (size_t x = 0; x < gf->n_nodes; ++x) {
+        //pretty_print_tensor(gf->nodes[x], stream);
+        //}
+        //save_string_to_file(stream.str(), "../../../../../TensorData.txt");
         res->set_inputs(&ubatch);
-
+        stop_watch_val.reset();
         const auto compute_status = graph_compute(gf, ubatch.n_tokens > 1);
+        stop_watch_val.add_time();
+        std::cout << "LLAMA.CPP/GGML AVERAGE COMPUTE TIME, OVER: "
+                  << std::setw(50 - std::size("LLAMA.CPP/GGML AVERAGE COMPUTE TIME, OVER: "))
+                  << stop_watch_val.get_count() << " TOKENS: " << stop_watch_val.get_average() << std::endl;
         if (compute_status != GGML_STATUS_SUCCESS) {
             switch (compute_status) {
                 case GGML_STATUS_ABORTED:
